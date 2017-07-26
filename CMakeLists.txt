@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
+add_compile_options(-std=c++11)
 project(gpg)
 set(CMAKE_BUILD_TYPE Release)
 
@@ -16,7 +17,13 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  cmake_modules
+  eigen_conversions
+  message_generation 
+  sensor_msgs
 )
+
+find_package(message_generation)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -52,11 +59,8 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+add_message_files(FILES CloudIndexed.msg CloudSamples.msg CloudSources.msg GraspConfig.msg GraspConfigList.msg 
+  SamplesMsg.msg)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -73,10 +77,8 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   geometry_msgs#   std_msgs
-# )
+generate_messages(DEPENDENCIES geometry_msgs sensor_msgs std_msgs)
+
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -107,11 +109,18 @@ find_package(catkin REQUIRED COMPONENTS
 ## LIBRARIES: libraries you create in this project that dependent projects also need
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
+# catkin_package(
+# #  INCLUDE_DIRS include
+# #  LIBRARIES gpg
+# #  CATKIN_DEPENDS geometry_msgs roscpp rospy std_msgs
+# #  DEPENDS system_lib
+# )
+
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES gpg
-#  CATKIN_DEPENDS geometry_msgs roscpp rospy std_msgs
-#  DEPENDS system_lib
+INCLUDE_DIRS include
+# LIBRARIES grasp_detector 
+CATKIN_DEPENDS cmake_modules eigen_conversions geometry_msgs message_runtime roscpp sensor_msgs std_msgs
+DEPENDS Eigen PCL
 )
 
 ###########
@@ -216,6 +225,8 @@ link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
 message("------------------ PCL_INCLUDE_DIRS: ${PCL_INCLUDE_DIRS}")
+message("------------------ EIGEN3_INCLUDE_DIR: ${EIGEN3_INCLUDE_DIR}")
+
 
 ## Set compiler optimization flags
 set(CMAKE_CXX_FLAGS "-O3 -fopenmp -fPIC -Wno-deprecated -Wenum-compare")
@@ -244,6 +255,8 @@ add_library(${PROJECT_NAME}_point_list src/${PROJECT_NAME}/point_list.cpp)
 
 # This executable is for testing the shared library
 add_executable(${PROJECT_NAME}_generate_candidates src/generate_candidates.cpp)
+
+
 target_link_libraries(${PROJECT_NAME}_generate_candidates 
                       ${PROJECT_NAME}_config_file 
                       ${PROJECT_NAME}_grasp_candidates_generator)
@@ -294,6 +307,18 @@ target_link_libraries(${PROJECT_NAME}_point_list
                       ${PROJECT_NAME}_eigen_utils)
 
 
+# ROS Node executable
+add_executable(${PROJECT_NAME}_generate_candidates_node src/generate_candidates_node.cpp)
+
+# force messages to rebuild
+add_dependencies(${PROJECT_NAME}_generate_candidates_node ${PROJECT_NAME}_generate_messages_cpp)
+target_link_libraries(${PROJECT_NAME}_generate_candidates_node
+                      ${PROJECT_NAME}_config_file 
+                      ${PROJECT_NAME}_grasp_candidates_generator
+                      ${catkin_LIBRARIES})
+
+
+
 # Rename executable.
 set_target_properties(${PROJECT_NAME}_generate_candidates 
                       PROPERTIES OUTPUT_NAME generate_candidates 
@@ -301,6 +326,11 @@ set_target_properties(${PROJECT_NAME}_generate_candidates
 
 set_target_properties(${PROJECT_NAME}_grasp_candidates_generator 
                       PROPERTIES OUTPUT_NAME grasp_candidates_generator)
+
+# Rename executable.
+set_target_properties(${PROJECT_NAME}_generate_candidates_node
+                      PROPERTIES OUTPUT_NAME generate_candidates_node
+                      PREFIX "")
 
 
 

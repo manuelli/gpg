@@ -1,0 +1,4 @@
+<launch>
+    <node name="generate_candidates" pkg="gpg" type="generate_candidates_node" output="screen">
+    </node>
+</launch>
