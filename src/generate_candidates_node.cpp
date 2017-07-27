@@ -58,13 +58,70 @@ GenerateCandidatesNode::GenerateCandidatesNode(ros::NodeHandle &node) : has_clou
 
 //    node.getParam("workspace", workspace_);
     std::string cloud_topic = "/cloud_pcd";
+    std::string pointcloud_list_topic = "/gpg/pointcloud_list";
     std::cout << "making subscriber" << std::endl;
     cloud_sub_ = node.subscribe(cloud_topic, 1, &GenerateCandidatesNode::cloud_pcd_callback, this);
-    grasps_pub_ = node.advertise<gpg::GraspConfigList>("/candidate_grasps", 10);
+    pointcloud_list_sub_ = node.subscribe(pointcloud_list_topic, 1, &GenerateCandidatesNode::pointcloud_list_callback, this);
+    grasps_pub_ = node.advertise<gpg::GraspConfigList>("/gpg/candidate_grasps", 10);
 }
 
 void GenerateCandidatesNode::cloud_samples_callback(const gpg::CloudSamples& msg){
     return;
+}
+
+// don't handle pointclouds with normals for now
+void GenerateCandidatesNode::pointcloud_list_callback(const gpg::PointCloudList &msg) {
+    PointCloudRGBA::Ptr cloud(new PointCloudRGBA);
+    int num_pointclouds = msg.pointclouds.size();
+    std::vector<int> cloud_sizes;
+
+    Eigen::Matrix3Xd view_points(3, num_pointclouds);
+    for (int i = 0; i < num_pointclouds; i++){
+        const gpg::SinglePointCloud &single_pointcloud_msg = msg.pointclouds[i];
+        PointCloudRGBA::Ptr single_cloud(new PointCloudRGBA);
+        pcl::fromROSMsg(single_pointcloud_msg.cloud, *single_cloud);
+        int single_cloud_size = single_cloud->size();
+        cloud_sizes.push_back(single_cloud_size);
+        ROS_INFO_STREAM("Single pointcloud has size " << single_cloud_size);
+
+        // add to the master pointcloud
+        *cloud += *single_cloud;
+        view_points.col(i) << single_pointcloud_msg.view_point.x, single_pointcloud_msg.view_point.y,
+                single_pointcloud_msg.view_point.z;
+    }
+
+    // create camera_source matrix
+    int num_points = cloud->size();
+    ROS_INFO_STREAM("merge pointcloud has " << num_points << " points");
+
+    Eigen::MatrixXi camera_source = Eigen::MatrixXi::Zero(num_pointclouds, num_points);
+
+    int num_points_counter = 0;
+    for (int i=0; i < num_pointclouds; i++){
+        camera_source.block(i, num_points_counter, 1, cloud_sizes[i]) = Eigen::MatrixXi::Ones(1, cloud_sizes[i]);
+        num_points_counter += cloud_sizes[i];
+    }
+
+    cloud_camera_.reset();
+    cloud_camera_ = std::make_shared<CloudCamera>(cloud, camera_source, view_points);
+
+
+    bool has_samples = (msg.samples.size() > 0);
+    if (has_samples){
+        std::cout << "message included sample points " << std::endl;
+        // Set the samples at which to sample grasp candidates.
+        Eigen::Matrix3Xd samples(3, msg.samples.size());
+        for (int i=0; i < msg.samples.size(); i++)
+        {
+            samples.col(i) << msg.samples[i].x, msg.samples[i].y, msg.samples[i].z;
+        }
+        cloud_camera_->setSamples(samples);
+    }
+
+
+
+    ROS_INFO("Finished making CloudCamera object");
+    this->generate_candidates_from_cloud_camera(*cloud_camera_);
 }
 
 void GenerateCandidatesNode::cloud_pcd_callback(const sensor_msgs::PointCloud2 msg) {
@@ -141,28 +198,34 @@ gpg::GraspConfigList GenerateCandidatesNode::createGraspListMsg(const std::vecto
 
 std::shared_ptr<CandidatesGenerator> GenerateCandidatesNode::make_default_candidates_generator() {
     // Create object to generate grasp candidates.
+
+    int num_threads = 20;
+    int num_samples = 100;
+
     CandidatesGenerator::Parameters generator_params;
-    generator_params.num_samples_ = 100;
-    generator_params.num_threads_ = 4;
+    generator_params.num_samples_ = num_samples;
+    generator_params.num_threads_ = num_threads;
     generator_params.plot_normals_ = false;
     generator_params.plot_grasps_ = false;
     generator_params.remove_statistical_outliers_ = true;
     generator_params.voxelize_ = true;
 
-    std::vector<double> workspace = {-1.0, 1.0, -1.0, 1.0, -1.0, 1.0};
-    generator_params.workspace_ = workspace;
+//    std::vector<double> workspace = {-1.0, 1.0, -1.0, 1.0, -1.0, 1.0};
+    generator_params.workspace_ = workspace_;
+
+//    std::cout << "workspace " << workspace_ << std::endl;
 
 
     HandSearch::Parameters hand_search_params;
-    hand_search_params.finger_width_ = 0.01;
+    hand_search_params.finger_width_ = 0.018;
     hand_search_params.hand_outer_diameter_ = 0.12;
-    hand_search_params.hand_depth_ = 0.06;
-    hand_search_params.hand_height_ = 0.02;
-    hand_search_params.init_bite_ = 0.01;
+    hand_search_params.hand_depth_ = 0.04;
+    hand_search_params.hand_height_ = 0.023;
+    hand_search_params.init_bite_ = 0.00;
     hand_search_params.nn_radius_frames_ = 0.01;
     hand_search_params.num_orientations_ = 8;
-    hand_search_params.num_samples_ = 100;
-    hand_search_params.num_threads_ = 4;
+    hand_search_params.num_samples_ = num_samples;
+    hand_search_params.num_threads_ = num_threads;
     hand_search_params.rotation_axis_ = 2; // not sure exactly what this mean
     return std::make_shared<CandidatesGenerator>(generator_params, hand_search_params);
 //    CandidatesGenerator candidates_generator(generator_params, hand_search_params);

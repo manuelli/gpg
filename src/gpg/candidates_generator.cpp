@@ -16,10 +16,14 @@ void CandidatesGenerator::preprocessPointCloud(CloudCamera& cloud_cam)
   const double VOXEL_SIZE = 0.003;
 
   std::cout << "Processing cloud with: " << cloud_cam.getCloudOriginal()->size() << " points.\n";
+  // 1. Workspace filtering
+  cloud_cam.filterWorkspace(params_.workspace_);
+  std::cout << "After workspace filtering: " << cloud_cam.getCloudProcessed()->size() << " points left.\n";
 
   // Calculate surface normals using integral images if possible.
   if (cloud_cam.getCloudOriginal()->isOrganized() && cloud_cam.getNormals().cols() == 0)
   {
+    std::cout << "calculateNormals(0)" << std::endl;
     cloud_cam.calculateNormals(0);
   }
 
@@ -42,9 +46,7 @@ void CandidatesGenerator::preprocessPointCloud(CloudCamera& cloud_cam)
   // No indices into point cloud given
   if (cloud_cam.getSampleIndices().size() == 0)
   {
-    // 1. Workspace filtering
-    cloud_cam.filterWorkspace(params_.workspace_);
-    std::cout << "After workspace filtering: " << cloud_cam.getCloudProcessed()->size() << " points left.\n";
+
 
     if (cloud_cam.getCloudProcessed()->size() == 0)
     {

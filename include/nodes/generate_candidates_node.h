@@ -26,6 +26,8 @@
 #include <gpg/CloudSamples.h>
 #include <gpg/GraspConfig.h>
 #include <gpg/GraspConfigList.h>
+#include <gpg/SinglePointCloud.h>
+#include <gpg/PointCloudList.h>
 
 
 typedef pcl::PointCloud<pcl::PointXYZRGBA> PointCloudRGBA;
@@ -50,6 +52,8 @@ private:
   */
     void cloud_samples_callback(const gpg::CloudSamples& msg);
     void cloud_pcd_callback(const sensor_msgs::PointCloud2);
+    void pointcloud_list_callback(const gpg::PointCloudList& msg);
+
     std::vector<Grasp> generate_candidates_from_cloud_camera(CloudCamera cloud_cam);
     std::shared_ptr<CandidatesGenerator> make_default_candidates_generator();
     gpg::GraspConfig convertToGraspMsg(const Grasp& hand);
@@ -59,6 +63,7 @@ private:
     bool has_cloud_, has_normals_, has_samples_; ///< status variables for received (input) messages
     std::string frame_; ///< point cloud frame
     ros::Subscriber cloud_sub_; ///< ROS subscriber for point cloud messages
+    ros::Subscriber pointcloud_list_sub_; ///< ROS subscriber for point cloud messages
     ros::Subscriber samples_sub_; ///< ROS subscriber for samples messages
     ros::Publisher grasps_pub_; ///< ROS publisher for grasp list messages
     ros::Publisher grasps_rviz_pub_; ///< ROS publisher for grasps in rviz (visualization)
